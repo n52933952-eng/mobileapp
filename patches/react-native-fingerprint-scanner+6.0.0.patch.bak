@@ -1,0 +1,31 @@
+diff --git a/node_modules/react-native-fingerprint-scanner/android/build.gradle b/node_modules/react-native-fingerprint-scanner/android/build.gradle
+index eaf3829..4645c50 100644
+--- a/node_modules/react-native-fingerprint-scanner/android/build.gradle
++++ b/node_modules/react-native-fingerprint-scanner/android/build.gradle
+@@ -9,7 +9,7 @@ buildscript {
+     if (project == rootProject) {
+         repositories {
+             google()
+-            jcenter()
++            mavenCentral()
+         }
+ 
+         dependencies {
+@@ -37,7 +37,8 @@ android {
+ 
+ repositories {
+     mavenCentral()
+-    jcenter()
++    google()
++    maven { url 'https://www.jitpack.io' }
+ }
+ 
+ dependencies {
+@@ -49,5 +50,6 @@ dependencies {
+     // 1.2.3 is the minimum version compatible with androidx.
+     // See https://github.com/uccmawei/FingerprintIdentify/issues/74
+     // (translation https://translate.google.com/translate?sl=zh-CN&tl=en&u=https://github.com/uccmawei/FingerprintIdentify/issues/74)
+-    implementation "com.wei.android.lib:fingerprintidentify:${safeExtGet("fingerprintidentify", "1.2.6")}"
++    // Using JitPack repository for fingerprintidentify library
++    implementation "com.github.uccmawei:FingerprintIdentify:${safeExtGet("fingerprintidentify", "1.2.6")}"
+ }

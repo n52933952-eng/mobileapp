@@ -2,6 +2,9 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
+// Apply react-native-vector-icons fonts
+apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"
+
 /**
  * This is the configuration block to customize your React Native Android app.
  * By default you don't need to apply any configuration, just uncomment the lines you need.
@@ -78,12 +81,17 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace "com.appmobile"
+    
     defaultConfig {
         applicationId "com.appmobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+    }
+    
+    aaptOptions {
+        noCompress "tflite"
     }
     signingConfigs {
         debug {
@@ -116,4 +124,8 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+    
+    // TensorFlow Lite for face recognition
+    implementation 'org.tensorflow:tensorflow-lite:2.14.0'
+    implementation 'org.tensorflow:tensorflow-lite-support:0.4.4'
 }
