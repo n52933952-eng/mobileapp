@@ -334,6 +334,19 @@ export const authAPI = {
         data: error.response?.data,
       });
       
+      // CRITICAL: Check for backend error message FIRST (even if code is ERR_NETWORK)
+      // The backend might return a proper error message even if fetch treats it as network error
+      if (error.response?.data?.message || error.data?.message) {
+        const backendMessage = error.response?.data?.message || error.data?.message;
+        console.log('✅ Backend error message found:', backendMessage);
+        // Create a new error with the backend message but preserve the original error structure
+        const backendError = new Error(backendMessage);
+        (backendError as any).response = error.response || { status: error.status, data: error.data || error.response?.data };
+        (backendError as any).status = error.status || error.response?.status;
+        (backendError as any).code = error.code;
+        throw backendError;
+      }
+      
       // If request took a long time (>25 seconds), backend might have processed it
       // Check if user was created by trying to login
       if (requestTime >= 25000 && (error.code === 'ECONNABORTED' || error.message === 'Network Error' || error.code === 'ERR_NETWORK')) {

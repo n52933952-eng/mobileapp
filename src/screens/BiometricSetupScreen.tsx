@@ -439,6 +439,13 @@ const BiometricSetupScreen: React.FC<BiometricSetupScreenProps> = ({ onSetupComp
 
     setLoading(true);
     try {
+      // CRITICAL: DO NOT clear old biometric data from AsyncStorage here!
+      // If registration fails (duplicate), we need to keep the old key for login.
+      // The new key will only be used in state for this registration attempt.
+      // If registration succeeds, the new key will be saved (overwriting old one).
+      // If registration fails, the old key remains in AsyncStorage for login.
+      console.log('🔑 Starting fingerprint setup - old key preserved in AsyncStorage until registration succeeds');
+      
       // Step 1: Authenticate with biometric (fingerprint/face ID)
       const authResult = await authenticateWithBiometrics(
         t('biometricSetup.enableBiometricStep1'),
@@ -459,12 +466,22 @@ const BiometricSetupScreen: React.FC<BiometricSetupScreenProps> = ({ onSetupComp
         return;
       }
 
-      setFingerprintPublicKey(keysResult.publicKey);
+      // CRITICAL: Normalize the key (trim whitespace) to prevent intermittent mismatches
+      const normalizedKey = keysResult.publicKey.trim();
+      
+      // Log if normalization changed the key
+      if (keysResult.publicKey !== normalizedKey) {
+        console.warn('⚠️ WARNING: Fingerprint key had whitespace! Normalized.');
+        console.warn('   Original length:', keysResult.publicKey.length);
+        console.warn('   Normalized length:', normalizedKey.length);
+      }
+      
+      setFingerprintPublicKey(normalizedKey);
       setFingerprintCompleted(true);
       
       // Don't save to AsyncStorage here - just use state
       // We'll save to AsyncStorage AFTER successful registration (for login)
-      console.log('✅ Fingerprint setup completed (stored in state)');
+      console.log('✅ Fingerprint setup completed (stored in state, normalized)');
 
       Alert.alert(
         t('biometricSetup.success'),
@@ -732,23 +749,33 @@ const BiometricSetupScreen: React.FC<BiometricSetupScreenProps> = ({ onSetupComp
         face: faceData.face,
         // NO IMAGE - only face features for privacy
       };
+      // CRITICAL: Normalize the key before saving (trim whitespace)
+      const normalizedKey = fingerprintPublicKey.trim();
+      
       await AsyncStorage.setItem('faceData', JSON.stringify(faceDataForStorage));
-      await AsyncStorage.setItem('fingerprintPublicKey', fingerprintPublicKey);
+      await AsyncStorage.setItem('fingerprintPublicKey', normalizedKey);
       await AsyncStorage.setItem('biometricEnabled', 'true');
       console.log('✅ Face data saved to AsyncStorage with faceId:', faceId);
-      console.log('✅ fingerprintPublicKey saved to AsyncStorage');
-      console.log('🔑 Saved key (first 50 chars):', fingerprintPublicKey.substring(0, 50) + '...');
-      console.log('🔑 Saved key (full length):', fingerprintPublicKey.length);
-      console.log('🔑 Saved key (last 50 chars):', '...' + fingerprintPublicKey.substring(fingerprintPublicKey.length - 50));
+      console.log('✅ fingerprintPublicKey saved to AsyncStorage (normalized)');
+      console.log('🔑 Saved key (first 50 chars):', normalizedKey.substring(0, 50) + '...');
+      console.log('🔑 Saved key (full length):', normalizedKey.length);
+      console.log('🔑 Saved key (last 50 chars):', '...' + normalizedKey.substring(normalizedKey.length - 50));
       console.log('💡 CRITICAL: This EXACT key was sent to backend and saved in database');
       console.log('💡 This key MUST be used for login - do NOT regenerate keys!');
       
       // Verify the key was saved correctly
       const verifyKey = await AsyncStorage.getItem('fingerprintPublicKey');
-      if (verifyKey === fingerprintPublicKey) {
-        console.log('✅ Verified: Key saved correctly to AsyncStorage');
+      // Compare normalized keys
+      const normalizedVerifyKey = verifyKey ? verifyKey.trim() : null;
+      const normalizedOriginalKey = fingerprintPublicKey ? fingerprintPublicKey.trim() : null;
+      if (normalizedVerifyKey === normalizedOriginalKey) {
+        console.log('✅ Verified: Key saved correctly to AsyncStorage (normalized comparison)');
       } else {
         console.error('❌ ERROR: Key verification failed! Saved key does not match!');
+        console.error('   Original key length:', fingerprintPublicKey?.length || 0);
+        console.error('   Saved key length:', verifyKey?.length || 0);
+        console.error('   Normalized original length:', normalizedOriginalKey?.length || 0);
+        console.error('   Normalized saved length:', normalizedVerifyKey?.length || 0);
       }
       
       // Verify it was saved correctly
@@ -834,7 +861,13 @@ const BiometricSetupScreen: React.FC<BiometricSetupScreenProps> = ({ onSetupComp
         return;
       }
       
-      const errorMessage = error.response?.data?.message || error.message || t('biometricSetup.registrationFailed');
+      // Get error message from all possible locations (backend error, response data, or generic error)
+      const errorMessage = error.response?.data?.message || 
+                          error.data?.message || 
+                          error.message || 
+                          t('biometricSetup.registrationFailed');
+      
+      console.log('🔍 Error message extracted:', errorMessage);
       
       // Check if error is about duplicate face, fingerprint, or device already used
       const isDuplicateFace = errorMessage.includes('الوجه مسجل') || errorMessage.includes('الوجه مسجل مسبقاً');
@@ -845,6 +878,20 @@ const BiometricSetupScreen: React.FC<BiometricSetupScreenProps> = ({ onSetupComp
                                   errorMessage.includes('الوجه والبصمة مسجلان');
       
       if (isDuplicateFace || isDuplicateFingerprint || isDeviceAlreadyUsed || isAlreadyRegistered) {
+        // CRITICAL: If registration failed due to duplicate, we MUST preserve the old key
+        // The new key in state should NOT overwrite the old key in AsyncStorage
+        // Check if we have an old key that should be preserved
+        const oldKey = await AsyncStorage.getItem('fingerprintPublicKey');
+        if (oldKey && oldKey !== fingerprintPublicKey) {
+          console.log('🔑 Registration failed - preserving old key in AsyncStorage for login');
+          console.log('   Old key (from AsyncStorage):', oldKey.substring(0, 50) + '...');
+          console.log('   New key (from state, not saved):', fingerprintPublicKey?.substring(0, 50) + '...');
+          console.log('✅ Old key preserved - user can login with original key');
+        } else if (!oldKey) {
+          console.warn('⚠️ WARNING: No old key found in AsyncStorage!');
+          console.warn('⚠️ This might cause login issues. The new key was not saved because registration failed.');
+        }
+        
         // Show alert with button to navigate to login screen
         let title = t('biometricSetup.registrationError');
         if (isAlreadyRegistered && errorMessage.includes('الوجه والبصمة')) {

@@ -108,30 +108,49 @@ const BiometricSetupModal: React.FC<BiometricSetupModalProps> = ({ onSetupComple
       // First, try AsyncStorage - this has the EXACT key that was sent to backend during registration
       const storedFingerprintPublicKey = await AsyncStorage.getItem('fingerprintPublicKey');
       if (storedFingerprintPublicKey) {
-        fingerprintPublicKey = storedFingerprintPublicKey;
+        // CRITICAL: Normalize the key (trim whitespace) to prevent intermittent mismatches
+        // This ensures consistent comparison on backend
+        fingerprintPublicKey = storedFingerprintPublicKey.trim();
+        
+        // Log if normalization changed the key (indicates whitespace issue)
+        if (storedFingerprintPublicKey !== fingerprintPublicKey) {
+          console.warn('⚠️ WARNING: Fingerprint key had whitespace! Normalized.');
+          console.warn('   Original length:', storedFingerprintPublicKey.length);
+          console.warn('   Normalized length:', fingerprintPublicKey.length);
+        }
+        
         console.log('✅ Using fingerprint key from AsyncStorage (EXACT key from registration)');
-        console.log('🔑 Key (first 100 chars):', storedFingerprintPublicKey.substring(0, 100) + '...');
-        console.log('🔑 Key (full length):', storedFingerprintPublicKey.length);
-        console.log('🔑 Key (last 100 chars):', '...' + storedFingerprintPublicKey.substring(storedFingerprintPublicKey.length - 100));
+        console.log('🔑 Key (first 100 chars):', fingerprintPublicKey.substring(0, 100) + '...');
+        console.log('🔑 Key (full length):', fingerprintPublicKey.length);
+        console.log('🔑 Key (last 100 chars):', '...' + fingerprintPublicKey.substring(fingerprintPublicKey.length - 100));
         console.log('💡 This is the EXACT key that was sent to backend during registration');
         console.log('🔍 FULL KEY for debugging (first 200 + last 200):');
-        console.log('   Start:', storedFingerprintPublicKey.substring(0, 200));
-        console.log('   End:', storedFingerprintPublicKey.substring(Math.max(0, storedFingerprintPublicKey.length - 200)));
-        console.log('   Complete length:', storedFingerprintPublicKey.length);
+        console.log('   Start:', fingerprintPublicKey.substring(0, 200));
+        console.log('   End:', fingerprintPublicKey.substring(Math.max(0, fingerprintPublicKey.length - 200)));
+        console.log('   Complete length:', fingerprintPublicKey.length);
       } else {
         // Fallback: Try device secure storage
         console.log('⚠️ No key in AsyncStorage, trying device secure storage...');
         const existingKeyResult = await getExistingBiometricPublicKey();
         
         if (existingKeyResult.success && existingKeyResult.publicKey) {
-          fingerprintPublicKey = existingKeyResult.publicKey;
+          // CRITICAL: Normalize the key (trim whitespace) to prevent intermittent mismatches
+          fingerprintPublicKey = existingKeyResult.publicKey.trim();
+          
+          // Log if normalization changed the key
+          if (existingKeyResult.publicKey !== fingerprintPublicKey) {
+            console.warn('⚠️ WARNING: Fingerprint key from device had whitespace! Normalized.');
+            console.warn('   Original length:', existingKeyResult.publicKey.length);
+            console.warn('   Normalized length:', fingerprintPublicKey.length);
+          }
+          
           console.log('✅ Got fingerprint key from device secure storage (fallback)');
           console.log('🔑 Key (first 50 chars):', fingerprintPublicKey.substring(0, 50) + '...');
           console.log('⚠️ WARNING: This key might not match database if keys were regenerated!');
           
-          // Save to AsyncStorage for next time
+          // Save normalized key to AsyncStorage for next time
           await AsyncStorage.setItem('fingerprintPublicKey', fingerprintPublicKey);
-          console.log('✅ Saved key to AsyncStorage for next time');
+          console.log('✅ Saved normalized key to AsyncStorage for next time');
         } else {
           // No key found anywhere - this is a problem
           console.error('❌ CRITICAL: No fingerprint key found in AsyncStorage OR device storage!');

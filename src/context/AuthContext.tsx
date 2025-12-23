@@ -355,8 +355,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       let fingerprintPublicKey: string | null = null;
       
       // First, try AsyncStorage - this has the EXACT key that was sent to backend
-      fingerprintPublicKey = await AsyncStorage.getItem('fingerprintPublicKey');
-      if (fingerprintPublicKey) {
+      const storedKey = await AsyncStorage.getItem('fingerprintPublicKey');
+      if (storedKey) {
+        // CRITICAL: Normalize the key (trim whitespace) to prevent intermittent mismatches
+        fingerprintPublicKey = storedKey.trim();
+        
+        // Log if normalization changed the key
+        if (storedKey !== fingerprintPublicKey) {
+          console.warn('⚠️ WARNING: Fingerprint key had whitespace! Normalized.');
+          console.warn('   Original length:', storedKey.length);
+          console.warn('   Normalized length:', fingerprintPublicKey.length);
+        }
+        
         console.log('✅ Got fingerprint key from AsyncStorage (EXACT key from registration)');
       } else {
         // Fallback: Try device secure storage
@@ -365,11 +375,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const existingKeyResult = await getExistingBiometricPublicKey();
         
         if (existingKeyResult.success && existingKeyResult.publicKey) {
-          fingerprintPublicKey = existingKeyResult.publicKey;
+          // CRITICAL: Normalize the key (trim whitespace)
+          fingerprintPublicKey = existingKeyResult.publicKey.trim();
+          
+          // Log if normalization changed the key
+          if (existingKeyResult.publicKey !== fingerprintPublicKey) {
+            console.warn('⚠️ WARNING: Fingerprint key from device had whitespace! Normalized.');
+            console.warn('   Original length:', existingKeyResult.publicKey.length);
+            console.warn('   Normalized length:', fingerprintPublicKey.length);
+          }
+          
           console.log('✅ Got fingerprint key from device secure storage (fallback)');
           console.log('⚠️ WARNING: This key might not match database if keys were regenerated!');
           
-          // Save to AsyncStorage for next time
+          // Save normalized key to AsyncStorage for next time
           await AsyncStorage.setItem('fingerprintPublicKey', fingerprintPublicKey);
         }
       }
@@ -526,7 +545,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // First, try to get the stored key from AsyncStorage (saved during registration)
         const storedKey = await AsyncStorage.getItem('fingerprintPublicKey');
         if (storedKey) {
-          currentDeviceFingerprintPublicKey = storedKey;
+          // CRITICAL: Normalize the key (trim whitespace) to prevent intermittent mismatches
+          currentDeviceFingerprintPublicKey = storedKey.trim();
+          
+          // Log if normalization changed the key
+          if (storedKey !== currentDeviceFingerprintPublicKey) {
+            console.warn('⚠️ AuthContext: Fingerprint key had whitespace! Normalized.');
+            console.warn('   Original length:', storedKey.length);
+            console.warn('   Normalized length:', currentDeviceFingerprintPublicKey.length);
+          }
+          
           console.log('✅ AuthContext: Using STORED device fingerprintPublicKey (from registration)');
           console.log('🔑 AuthContext: Stored key (first 50 chars):', currentDeviceFingerprintPublicKey.substring(0, 50) + '...');
           console.log('📱 AuthContext: Key length:', currentDeviceFingerprintPublicKey.length);

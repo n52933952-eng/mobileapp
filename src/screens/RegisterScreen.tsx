@@ -43,28 +43,53 @@ const RegisterScreen: React.FC = () => {
   const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
 
   useEffect(() => {
-    // Clear old biometric data when starting a new registration
-    // This allows re-registration after deleting user from MongoDB
-    const clearOldBiometricData = async () => {
+    // CRITICAL: DO NOT clear biometric data on mount!
+    // This was causing issues where:
+    // 1. User registers successfully → key saved to AsyncStorage
+    // 2. User tries to register again → key gets cleared here
+    // 3. Registration is blocked (duplicate) → key is already gone
+    // 4. User tries to login → no key in AsyncStorage → gets NEW key from device → doesn't match database
+    // 
+    // Instead, biometric data will be:
+    // - Cleared when user explicitly starts biometric setup (in BiometricSetupScreen)
+    // - Overwritten when registration succeeds (new data saved)
+    // - Preserved if registration fails (so user can still login)
+    
+    // Only clear registrationData and faceCaptureResult (temporary data)
+    // Keep fingerprintPublicKey and faceData (needed for login)
+    const clearTemporaryData = async () => {
       try {
-        console.log('🧹 Clearing old biometric data from AsyncStorage for new registration...');
+        // Check if there's an existing key - if so, preserve it
+        const existingKey = await AsyncStorage.getItem('fingerprintPublicKey');
+        if (existingKey) {
+          console.log('🔑 Existing fingerprint key found - preserving it for login');
+          console.log('   Key (first 50 chars):', existingKey.substring(0, 50) + '...');
+        }
+        
+        console.log('🧹 Clearing temporary registration data from AsyncStorage...');
         await AsyncStorage.multiRemove([
-          'fingerprintPublicKey',
-          'faceData',
-          'faceCaptureResult',
-          'biometricEmail',
-          'biometricEmployeeNumber',
-          'biometricPassword',
-          'biometricEnabled',
-          'registrationData',
+          'faceCaptureResult', // Temporary face capture result
+          'registrationData', // Temporary registration form data
+          // NOTE: We do NOT clear fingerprintPublicKey or faceData here
+          // These are needed for login even if registration fails
         ]);
-        console.log('✅ Old biometric data cleared');
+        console.log('✅ Temporary data cleared (fingerprintPublicKey and faceData preserved)');
+        
+        // Verify key is still there after clearing
+        const keyAfterClear = await AsyncStorage.getItem('fingerprintPublicKey');
+        if (existingKey && !keyAfterClear) {
+          console.error('❌ CRITICAL: Key was lost during temporary data clear! Restoring...');
+          await AsyncStorage.setItem('fingerprintPublicKey', existingKey);
+          console.log('✅ Key restored');
+        } else if (keyAfterClear) {
+          console.log('✅ Key verified: Still in AsyncStorage after clearing temporary data');
+        }
       } catch (error) {
-        console.warn('⚠️ Error clearing biometric data:', error);
+        console.warn('⚠️ Error clearing temporary data:', error);
       }
     };
     
-    clearOldBiometricData();
+    clearTemporaryData();
     requestLocationPermissions();
   }, []);
 
