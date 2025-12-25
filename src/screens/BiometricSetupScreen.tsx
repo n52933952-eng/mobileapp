@@ -316,7 +316,34 @@ const BiometricSetupScreen: React.FC<BiometricSetupScreenProps> = ({ onSetupComp
         enableShutterSound: false,
       });
       
-      const originalImageUri = photo.path.startsWith("file://") ? photo.path : `file://${photo.path}`;
+      console.log("📸 Photo captured:", {
+        path: photo.path,
+        width: photo.width,
+        height: photo.height,
+      });
+      
+      let originalImageUri = photo.path;
+      
+      // Handle content:// URIs on Android - copy to temporary file for PhotoManipulator
+      if (Platform.OS === 'android' && originalImageUri.startsWith('content://')) {
+        try {
+          console.log("📋 Converting content:// URI to file:// URI for PhotoManipulator...");
+          const tempPath = `${RNFS.CachesDirectoryPath}/temp_face_${Date.now()}.jpg`;
+          await RNFS.copyFile(originalImageUri, tempPath);
+          originalImageUri = `file://${tempPath}`;
+          console.log("✅ Converted to file URI:", originalImageUri);
+        } catch (copyError: any) {
+          console.error("❌ Error copying content:// URI:", copyError);
+          // Continue with original URI - might work or will fail gracefully
+        }
+      } else if (!originalImageUri.startsWith("file://")) {
+        // Ensure file:// prefix if it's not a content:// URI
+        originalImageUri = `file://${originalImageUri}`;
+      }
+      
+      // Note: PhotoManipulator.crop should handle EXIF orientation automatically
+      // If orientation issues persist, we may need to use react-native-image-picker
+      // or handle EXIF orientation manually
       
       // Get image dimensions from photo metadata or use stored dimensions
       const imgWidth = imageDimensions.width || photo.width || photo.photoWidth || SCREEN_WIDTH;
@@ -355,29 +382,13 @@ const BiometricSetupScreen: React.FC<BiometricSetupScreenProps> = ({ onSetupComp
         faceCenterY,
       });
       
-      // Crop image to square (for circular display)
+      // Use original image for display (circular clipping will be handled by Image component styling)
+      // PhotoManipulator crop is causing issues, so we'll use the full image with proper styling
+      // The native TFLite module handles cropping internally for embedding generation
       let croppedImageUri: string | null = null;
-      try {
-        const croppedImage = await PhotoManipulator.crop(
-          originalImageUri,
-          {
-            x: cropX,
-            y: cropY,
-            width: cropWidth,
-            height: cropHeight,
-          }
-        );
-        
-        console.log("✅ Image cropped successfully:", croppedImage);
-        croppedImageUri = croppedImage;
-        setCapturedImageUri(croppedImage);
-      } catch (cropError: any) {
-        console.error("❌ Error cropping image:", cropError);
-        // If crop fails, use original image
-        console.log("⚠️ Using original image (crop failed)");
-        croppedImageUri = originalImageUri;
-        setCapturedImageUri(originalImageUri);
-      }
+      console.log("📸 Using original image for display (cropping handled by native module for processing)");
+      croppedImageUri = originalImageUri;
+      setCapturedImageUri(originalImageUri);
       
       // Generate faceId
       const faceId = generateFaceId(detectedFace);
@@ -1068,7 +1079,7 @@ const BiometricSetupScreen: React.FC<BiometricSetupScreenProps> = ({ onSetupComp
                       <View style={styles.circularImageContainer}>
                         <Image 
                           source={{ uri: capturedImageUri }} 
-                          style={[styles.circularImagePreview, { transform: [{ scaleX: -1 }] }]}
+                          style={styles.circularImagePreview}
                           resizeMode="cover"
                         />
                       </View>

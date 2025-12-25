@@ -22,9 +22,41 @@ import { useLanguage } from '../context/LanguageContext';
 
 type FilterType = 'all' | Announcement['type'];
 
-// Note: typeFilters will be translated in JSX using t()
+// Announcement type configuration
+const typeConfig = {
+  general: {
+    icon: 'bullhorn',
+    color: '#2563EB',
+    background: '#EFF6FF',
+    label: 'عام',
+  },
+  urgent: {
+    icon: 'alert-circle',
+    color: '#DC2626',
+    background: '#FEE2E2',
+    label: 'عاجل',
+  },
+  event: {
+    icon: 'calendar-star',
+    color: '#7C3AED',
+    background: '#F3E8FF',
+    label: 'حدث',
+  },
+  policy: {
+    icon: 'file-document',
+    color: '#059669',
+    background: '#D1FAE5',
+    label: 'سياسة',
+  },
+};
 
-// Note: typeConfig labels will be translated in JSX using t()
+// Announcement type labels (translated)
+const typeLabels: Record<Announcement['type'], string> = {
+  general: 'عام',
+  urgent: 'عاجل',
+  event: 'حدث',
+  policy: 'سياسة',
+};
 
 const AnnouncementsScreen: React.FC = () => {
   const { t } = useTranslation();
