@@ -59,19 +59,54 @@ const BiometricSetupScreen: React.FC<BiometricSetupScreenProps> = ({ onSetupComp
   
   // Configure camera format for optimal face detection
   const cameraFormat = useMemo(() => {
-    if (!cameraDevice) return undefined;
+    if (!cameraDevice) {
+      console.log('⚠️ No camera device available');
+      return undefined;
+    }
     
     // Find a format that supports photo capture
     const formats = cameraDevice.formats;
     
+    if (!formats || formats.length === 0) {
+      console.log('⚠️ No camera formats available');
+      return undefined;
+    }
+    
+    console.log(`📷 Found ${formats.length} camera formats`);
+    
     // Prefer 1080p or lower for better performance with face detection
-    const preferredFormat = formats.find(f => 
+    let preferredFormat = formats.find(f => 
       f.photoHeight >= 1080 && f.photoHeight <= 1920 &&
       f.photoWidth >= 720 && f.photoWidth <= 1440
     );
     
-    // Fallback: Use first available format
-    return preferredFormat || formats[0];
+    // If no preferred format, try to find any format with reasonable resolution (not too high, not too low)
+    if (!preferredFormat) {
+      console.log('⚠️ No preferred format found, trying alternative ranges...');
+      // Try lower resolution (720p range)
+      preferredFormat = formats.find(f => 
+        f.photoHeight >= 720 && f.photoHeight <= 1080 &&
+        f.photoWidth >= 480 && f.photoWidth <= 720
+      );
+    }
+    
+    // If still no format, try to find any format that's not too high resolution (avoid 4K+)
+    if (!preferredFormat) {
+      console.log('⚠️ No alternative format found, trying any format below 4K...');
+      preferredFormat = formats.find(f => 
+        f.photoHeight <= 2160 && f.photoWidth <= 3840
+      );
+    }
+    
+    // Final fallback: Use first available format (but log it)
+    const selectedFormat = preferredFormat || formats[0];
+    if (selectedFormat) {
+      console.log(`✅ Selected camera format: ${selectedFormat.photoWidth}x${selectedFormat.photoHeight}`);
+    } else {
+      console.error('❌ No camera format could be selected!');
+    }
+    
+    return selectedFormat;
   }, [cameraDevice]);
   
   const cameraRef = useRef<Camera>(null);
@@ -197,10 +232,13 @@ const BiometricSetupScreen: React.FC<BiometricSetupScreenProps> = ({ onSetupComp
 
         const imagePath = photo.path.startsWith("file://") ? photo.path : `file://${photo.path}`;
         
-        // Get image dimensions for centering check
-        const cameraFormat = cameraDevice?.formats?.[0];
-        const photoWidth = cameraFormat?.photoWidth || photo.width || SCREEN_WIDTH;
-        const photoHeight = cameraFormat?.photoHeight || photo.height || 300;
+        // Get image dimensions for centering check - use actual photo metadata first
+        // Priority: 1) photo.width/height, 2) cameraFormat dimensions, 3) screen dimensions
+        const photoWidth = photo.width || cameraFormat?.photoWidth || cameraDevice?.formats?.[0]?.photoWidth || SCREEN_WIDTH;
+        const photoHeight = photo.height || cameraFormat?.photoHeight || cameraDevice?.formats?.[0]?.photoHeight || SCREEN_HEIGHT;
+        
+        console.log(`📐 Photo dimensions: ${photoWidth}x${photoHeight} (from photo: ${photo.width}x${photo.height}, format: ${cameraFormat?.photoWidth}x${cameraFormat?.photoHeight})`);
+        
         setImageDimensions({ width: photoWidth, height: photoHeight });
         
         const faces = await Promise.race([
@@ -346,8 +384,11 @@ const BiometricSetupScreen: React.FC<BiometricSetupScreenProps> = ({ onSetupComp
       // or handle EXIF orientation manually
       
       // Get image dimensions from photo metadata or use stored dimensions
-      const imgWidth = imageDimensions.width || photo.width || photo.photoWidth || SCREEN_WIDTH;
-      const imgHeight = imageDimensions.height || photo.height || photo.photoHeight || 300;
+      // Priority: 1) photo.width/height, 2) stored imageDimensions, 3) cameraFormat, 4) screen dimensions
+      const imgWidth = photo.width || imageDimensions.width || photo.photoWidth || cameraFormat?.photoWidth || cameraDevice?.formats?.[0]?.photoWidth || SCREEN_WIDTH;
+      const imgHeight = photo.height || imageDimensions.height || photo.photoHeight || cameraFormat?.photoHeight || cameraDevice?.formats?.[0]?.photoHeight || SCREEN_HEIGHT;
+      
+      console.log(`📐 Final image dimensions for cropping: ${imgWidth}x${imgHeight}`);
       
       // Crop image to circular area (face area)
       const frame = detectedFace.frame || detectedFace.bounds || {};
@@ -469,7 +510,8 @@ const BiometricSetupScreen: React.FC<BiometricSetupScreenProps> = ({ onSetupComp
         return;
       }
 
-      // Step 2: Create biometric keys to get publicKey (unique fingerprint ID)
+
+      // Step 2: Create NEW biometric keys to get publicKey (unique fingerprint ID)
       const keysResult = await createBiometricKeys();
       if (!keysResult.success || !keysResult.publicKey) {
         Alert.alert(t('biometricSetup.error'), t('biometricSetup.biometricKeysFailed'));
@@ -1104,7 +1146,7 @@ const BiometricSetupScreen: React.FC<BiometricSetupScreenProps> = ({ onSetupComp
                         )}
                       </TouchableOpacity>
                     </View>
-                  ) : hasCameraPermission && cameraDevice ? (
+                  ) : hasCameraPermission && cameraDevice && cameraFormat ? (
                     // Show embedded camera
                     <View style={styles.embeddedCameraContainer}>
                       <View style={styles.cameraWrapper}>
@@ -1159,11 +1201,15 @@ const BiometricSetupScreen: React.FC<BiometricSetupScreenProps> = ({ onSetupComp
                       </Text>
                     </View>
                   ) : (
-                    // Show permission request or loading
+                    // Show permission request, loading, or device error
                     <View style={styles.faceCaptureLoading}>
                       <ActivityIndicator size="large" color="#4F46E5" />
                       <Text style={styles.faceCaptureLoadingText}>
-                        {hasCameraPermission === false 
+                        {!cameraDevice 
+                          ? 'الكاميرا غير متاحة على هذا الجهاز'
+                          : !cameraFormat
+                          ? 'تحديد تنسيق الكاميرا...'
+                          : hasCameraPermission === false 
                           ? t('biometricSetup.allowCameraAccess')
                           : t('biometricSetup.preparingCamera')}
                       </Text>
@@ -1174,6 +1220,11 @@ const BiometricSetupScreen: React.FC<BiometricSetupScreenProps> = ({ onSetupComp
                         >
                           <Text style={styles.primaryButtonText}>{t('biometricSetup.allowAccess')}</Text>
                         </TouchableOpacity>
+                      )}
+                      {!cameraDevice && (
+                        <Text style={[styles.faceCaptureLoadingText, { marginTop: 8, color: '#EF4444' }]}>
+                          يرجى التحقق من أن الجهاز يحتوي على كاميرا أمامية
+                        </Text>
                       )}
                     </View>
                   )}

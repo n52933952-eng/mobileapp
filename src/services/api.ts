@@ -11,7 +11,7 @@ import RNFS from 'react-native-fs';
 
 import { Platform } from 'react-native';
 
-const API_BASE_URL = process.env.API_BASE_URL || 'https://work-spot-6.onrender.com/api';
+const API_BASE_URL = process.env.API_BASE_URL || 'https://work-spot-1.onrender.com/api';
 
 console.log('🔗 API Base URL:', API_BASE_URL);
 console.log('📱 Platform:', Platform.OS);

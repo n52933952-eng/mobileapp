@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Socket.io URL - Set SOCKET_URL in .env file or use default server URL
 // For production: Use your server URL
 // For local development: Use 'http://10.0.2.2:5000' (Android Emulator) or 'http://localhost:5000' (iOS Simulator)
-const SOCKET_URL = process.env.SOCKET_URL || 'https://work-spot-6.onrender.com';
+const SOCKET_URL = process.env.SOCKET_URL || 'https://work-spot-1.onrender.com';
 
 let socket: Socket | null = null;
 
@@ -39,7 +39,7 @@ export const initializeSocket = async (): Promise<Socket> => {
       query: {
         userId: userId || 'undefined',
       },
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'], // Try polling first, then upgrade to websocket
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
@@ -64,7 +64,9 @@ export const initializeSocket = async (): Promise<Socket> => {
     });
 
     socket.on('connect_error', (error) => {
-      console.error('🔴 Socket connection error:', error.message);
+      // Only log as warning - socket.io will retry automatically
+      // If socket eventually connects, this is just a transient error
+      console.warn('⚠️ Socket connection error (will retry):', error.message);
     });
 
     socket.on('reconnect', (attemptNumber) => {
@@ -76,7 +78,8 @@ export const initializeSocket = async (): Promise<Socket> => {
     });
 
     socket.on('reconnect_error', (error) => {
-      console.error('🔴 Reconnection error:', error.message);
+      // Only log as warning - socket.io will keep retrying
+      console.warn('⚠️ Socket reconnection error (will retry):', error.message);
     });
 
     socket.on('reconnect_failed', () => {

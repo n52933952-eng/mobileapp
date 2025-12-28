@@ -27,20 +27,54 @@ export default function FaceCaptureScreen() {
   
   // Configure camera format for optimal face detection
   const format = useMemo(() => {
-    if (!device) return undefined;
+    if (!device) {
+      console.log('⚠️ No camera device available');
+      return undefined;
+    }
     
     // Find a format that supports photo capture
-    // Prefer 1080p or lower for better performance
     const formats = device.formats;
     
-    // Try to find a good format for face detection (not too high res, not too low)
-    const preferredFormat = formats.find(f => 
+    if (!formats || formats.length === 0) {
+      console.log('⚠️ No camera formats available');
+      return undefined;
+    }
+    
+    console.log(`📷 Found ${formats.length} camera formats`);
+    
+    // Prefer 1080p or lower for better performance with face detection
+    let preferredFormat = formats.find(f => 
       f.photoHeight >= 1080 && f.photoHeight <= 1920 &&
       f.photoWidth >= 720 && f.photoWidth <= 1440
     );
     
-    // Fallback: Use first available format
-    return preferredFormat || formats[0];
+    // If no preferred format, try to find any format with reasonable resolution (not too high, not too low)
+    if (!preferredFormat) {
+      console.log('⚠️ No preferred format found, trying alternative ranges...');
+      // Try lower resolution (720p range)
+      preferredFormat = formats.find(f => 
+        f.photoHeight >= 720 && f.photoHeight <= 1080 &&
+        f.photoWidth >= 480 && f.photoWidth <= 720
+      );
+    }
+    
+    // If still no format, try to find any format that's not too high resolution (avoid 4K+)
+    if (!preferredFormat) {
+      console.log('⚠️ No alternative format found, trying any format below 4K...');
+      preferredFormat = formats.find(f => 
+        f.photoHeight <= 2160 && f.photoWidth <= 3840
+      );
+    }
+    
+    // Final fallback: Use first available format (but log it)
+    const selectedFormat = preferredFormat || formats[0];
+    if (selectedFormat) {
+      console.log(`✅ Selected camera format: ${selectedFormat.photoWidth}x${selectedFormat.photoHeight}`);
+    } else {
+      console.error('❌ No camera format could be selected!');
+    }
+    
+    return selectedFormat;
   }, [device]);
   
   const cameraRef = useRef<Camera>(null);
@@ -149,9 +183,12 @@ export default function FaceCaptureScreen() {
 
         const imagePath = photo.path.startsWith("file://") ? photo.path : `file://${photo.path}`;
         
-        const cameraFormat = device?.formats?.[0];
-        const photoWidth = cameraFormat?.photoWidth || photo.width || SCREEN_WIDTH;
-        const photoHeight = cameraFormat?.photoHeight || photo.height || SCREEN_HEIGHT;
+        // Get image dimensions - use actual photo metadata first
+        // Priority: 1) photo.width/height, 2) cameraFormat dimensions, 3) screen dimensions
+        const photoWidth = photo.width || format?.photoWidth || device?.formats?.[0]?.photoWidth || SCREEN_WIDTH;
+        const photoHeight = photo.height || format?.photoHeight || device?.formats?.[0]?.photoHeight || SCREEN_HEIGHT;
+        
+        console.log(`📐 Photo dimensions: ${photoWidth}x${photoHeight} (from photo: ${photo.width}x${photo.height}, format: ${format?.photoWidth}x${format?.photoHeight})`);
         
         // Detect faces with landmarks and classification enabled
         const faces = await Promise.race([

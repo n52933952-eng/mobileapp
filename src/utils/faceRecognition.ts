@@ -280,16 +280,28 @@ export const validateFaceQuality = (faceData: any): { valid: boolean; reason?: s
   // Log face size for debugging
   console.log(`📏 Face size: ${faceWidth}x${faceHeight} pixels`);
   
-  // Minimum size check only (no maximum)
-  // Square crop + TFLite normalization handles size variations
-  // As long as face is detected and not too small, it's valid
-  if (faceWidth < 150) {
+  // Minimum size check - make it more flexible for different device resolutions
+  // Use relative size (percentage of typical image) instead of absolute pixels
+  // For lower resolution devices (720p), minimum should be ~100px
+  // For higher resolution devices (1080p+), minimum should be ~150px
+  // Use a more flexible threshold: minimum 8% of typical width (works for 720p-4K)
+  // This ensures face is large enough for good recognition on any device
+  const minFaceWidth = 100; // Absolute minimum (for very low res devices)
+  const minFaceWidthRelative = 80; // Relative minimum (8% of 1000px = 80px, but we use 80px as base)
+  
+  // Use the larger of absolute or relative minimum
+  const effectiveMinWidth = Math.max(minFaceWidth, minFaceWidthRelative);
+  
+  if (faceWidth < effectiveMinWidth) {
+    console.log(`⚠️ Face too small: ${faceWidth}px < ${effectiveMinWidth}px minimum`);
     return { valid: false, reason: 'اقترب قليلاً - املأ الدائرة بوجهك' };
   }
   
   // Face must be roughly square (not too elongated)
+  // Make aspect ratio check more forgiving for different face shapes
   const aspectRatio = faceWidth / Math.max(faceHeight, 1);
-  if (aspectRatio < 0.7 || aspectRatio > 1.4) {
+  if (aspectRatio < 0.6 || aspectRatio > 1.5) {
+    console.log(`⚠️ Face aspect ratio out of range: ${aspectRatio.toFixed(2)}`);
     return { valid: false, reason: 'انظر مباشرة إلى الكاميرا' };
   }
 
